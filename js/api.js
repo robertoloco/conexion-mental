@@ -57,51 +57,76 @@ const palabrasBase = {
 class DiccionarioAPI {
     constructor() {
         this.palabrasUsadas = new Set();
-        this.palabrasBase = {};
+        this.palabrasBase = {
+            facil: [],
+            medio: [],
+            dificil: []
+        };
         this.palabrasCargadas = false;
     }
 
     async inicializarDiccionario() {
         if (this.palabrasCargadas) return;
 
-        try {
-            // URL de ejemplo - ajustar según el API que uses
-            const response = await fetch('https://api.dictionaryapi.dev/api/v2/entries/es');
-            const data = await response.json();
-            
-            // Procesar y categorizar palabras por nivel
-            this.palabrasBase = {
-                facil: [],
-                medio: [],
-                dificil: []
-            };
+        // Primero intentar cargar del caché
+        if (this.cargarDeCache()) {
+            return;
+        }
 
-            data.forEach(palabra => {
-                const longitud = palabra.word.length;
-                const dificultad = this.determinarDificultad(longitud, palabra.frequency);
+        try {
+            // URL de la API de la RAE (ejemplo)
+            const response = await fetch('https://api.dictionaryapi.dev/api/v2/entries/es/random?count=150');
+            const palabras = await response.json();
+            
+            // Procesar las palabras recibidas
+            palabras.forEach(palabraData => {
+                const palabra = palabraData.word;
+                const definicion = palabraData.meanings?.[0]?.definitions?.[0]?.definition || 'Sin definición disponible';
+                const dificultad = this.determinarDificultad(palabra);
                 
-                if (palabra.meanings && palabra.meanings.length > 0) {
-                    this.palabrasBase[dificultad].push({
-                        palabra: palabra.word,
-                        definicion: palabra.meanings[0].definitions[0].definition
-                    });
-                }
+                this.palabrasBase[dificultad].push({
+                    palabra: palabra,
+                    definicion: definicion
+                });
             });
+
+            // Si no hay suficientes palabras, usar el respaldo
+            if (this.contarPalabrasTotal() < 50) {
+                const palabrasRespaldo = this.obtenerPalabrasRespaldo();
+                for (const nivel in palabrasRespaldo) {
+                    this.palabrasBase[nivel] = [
+                        ...this.palabrasBase[nivel],
+                        ...palabrasRespaldo[nivel]
+                    ];
+                }
+            }
 
             this.palabrasCargadas = true;
             this.guardarEnCache();
         } catch (error) {
             console.error('Error al cargar el diccionario:', error);
-            // Usar palabras base como respaldo
             this.palabrasBase = this.obtenerPalabrasRespaldo();
             this.palabrasCargadas = true;
         }
     }
 
-    determinarDificultad(longitud, frecuencia) {
-        if (longitud <= 5 || frecuencia > 0.8) return 'facil';
-        if (longitud <= 8 || frecuencia > 0.4) return 'medio';
-        return 'dificil';
+    contarPalabrasTotal() {
+        return Object.values(this.palabrasBase).reduce((total, nivel) => total + nivel.length, 0);
+    }
+
+    determinarDificultad(palabra) {
+        // Criterios de dificultad basados en características de la palabra
+        const longitud = palabra.length;
+        const tieneCaracteresEspeciales = /[áéíóúñü]/i.test(palabra);
+        const tieneGruposConsonantes = /(br|bl|pr|pl|dr|tr|gr|gl|cr|cl|fr|fl)/i.test(palabra);
+        
+        if (longitud <= 5 && !tieneCaracteresEspeciales && !tieneGruposConsonantes) {
+            return 'facil';
+        } else if (longitud <= 8 || (!tieneCaracteresEspeciales && !tieneGruposConsonantes)) {
+            return 'medio';
+        } else {
+            return 'dificil';
+        }
     }
 
     guardarEnCache() {
@@ -122,8 +147,7 @@ class DiccionarioAPI {
                 const data = JSON.parse(cache);
                 const tiempoTranscurrido = Date.now() - data.timestamp;
                 
-                // Caché válido por 24 horas
-                if (tiempoTranscurrido < 24 * 60 * 60 * 1000) {
+                if (tiempoTranscurrido < CONFIG.API.CACHE_DURATION) {
                     this.palabrasBase = data.palabras;
                     this.palabrasCargadas = true;
                     return true;
@@ -137,9 +161,7 @@ class DiccionarioAPI {
 
     async obtenerPalabra(nivel) {
         if (!this.palabrasCargadas) {
-            if (!this.cargarDeCache()) {
-                await this.inicializarDiccionario();
-            }
+            await this.inicializarDiccionario();
         }
 
         const palabrasNivel = this.palabrasBase[nivel];
@@ -147,7 +169,7 @@ class DiccionarioAPI {
 
         if (palabrasDisponibles.length === 0) {
             this.palabrasUsadas.clear();
-            return null;
+            return palabrasNivel[Math.floor(Math.random() * palabrasNivel.length)];
         }
 
         const indice = Math.floor(Math.random() * palabrasDisponibles.length);
@@ -182,21 +204,7 @@ class DiccionarioAPI {
     }
 
     obtenerPalabrasRespaldo() {
-        // Mantener las palabras base originales como respaldo
-        return {
-            facil: [
-                { palabra: 'casa', definicion: 'Edificio destinado a vivienda' },
-                // ... resto de palabras fáciles
-            ],
-            medio: [
-                { palabra: 'conexión', definicion: 'Enlace, atadura, trabazón, concatenación de una cosa con otra' },
-                // ... resto de palabras medias
-            ],
-            dificil: [
-                { palabra: 'inefable', definicion: 'Que no se puede explicar con palabras' },
-                // ... resto de palabras difíciles
-            ]
-        };
+        return palabrasBase;
     }
 }
 
