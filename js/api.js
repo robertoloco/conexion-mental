@@ -92,8 +92,8 @@ class DiccionarioAPI {
 
     async obtenerPalabraDRAE() {
         try {
-            // Obtener una palabra aleatoria
-            const response = await fetch(`${CONFIG.API.DRAE}random`, {
+            // Obtener una palabra aleatoria usando el proxy
+            const response = await fetch(`${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + 'random')}`, {
                 headers: CONFIG.API.HEADERS
             });
 
@@ -103,8 +103,8 @@ class DiccionarioAPI {
 
             const data = await response.json();
             
-            // Obtener la definición
-            const definicionResponse = await fetch(`${CONFIG.API.DRAE}${data.id}`, {
+            // Obtener la definición usando el proxy
+            const definicionResponse = await fetch(`${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + data.id)}`, {
                 headers: CONFIG.API.HEADERS
             });
 
@@ -162,8 +162,8 @@ class DiccionarioAPI {
         }
 
         try {
-            // Intentar obtener del DRAE
-            const response = await fetch(`${CONFIG.API.DRAE}${encodeURIComponent(palabra)}`, {
+            // Intentar obtener del DRAE usando el proxy
+            const response = await fetch(`${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + encodeURIComponent(palabra))}`, {
                 headers: CONFIG.API.HEADERS
             });
 

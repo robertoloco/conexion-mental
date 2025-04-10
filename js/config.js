@@ -8,14 +8,14 @@ export const CONFIG = {
         dificil: 'Difícil'
     },
     API: {
+        PROXY: 'https://api.allorigins.win/raw?url=',
         DRAE: 'https://dle.rae.es/data/',
         BACKUP: 'https://api.dictionaryapi.dev/api/v2/entries/es/',
         CACHE_TIME: 3600, // 1 hora en segundos
         MAX_RETRIES: 3,
         HEADERS: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Origin': 'https://dle.rae.es'
+            'Accept': 'application/json'
         }
     },
     CATEGORIAS: {
