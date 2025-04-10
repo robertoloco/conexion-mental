@@ -63,27 +63,24 @@ class DiccionarioAPI {
 
     async obtenerPalabra(nivel) {
         try {
-            // Primero intentar obtener una palabra del DRAE
-            const palabra = await this.obtenerPalabraDRAE();
-            if (palabra && !this.palabrasUsadas.has(palabra.palabra)) {
-                this.palabrasUsadas.add(palabra.palabra);
-                return palabra;
-            }
-
-            // Si no funciona, usar palabras base
+            // Intentar obtener palabra del DRAE solo si no hay suficientes palabras locales
             const palabrasNivel = this.palabrasBase[nivel];
             const palabrasDisponibles = palabrasNivel.filter(p => !this.palabrasUsadas.has(p.palabra));
 
-            if (palabrasDisponibles.length === 0) {
-                this.palabrasUsadas.clear();
-                return null;
+            // Si tenemos suficientes palabras locales, usarlas
+            if (palabrasDisponibles.length > 0) {
+                const indice = Math.floor(Math.random() * palabrasDisponibles.length);
+                const palabraSeleccionada = palabrasDisponibles[indice];
+                this.palabrasUsadas.add(palabraSeleccionada.palabra);
+                return palabraSeleccionada;
             }
 
-            const indice = Math.floor(Math.random() * palabrasDisponibles.length);
-            const palabraSeleccionada = palabrasDisponibles[indice];
-            this.palabrasUsadas.add(palabraSeleccionada.palabra);
+            // Si no hay palabras disponibles, reiniciar y usar la primera disponible
+            this.palabrasUsadas.clear();
+            const primeraPalabra = palabrasNivel[Math.floor(Math.random() * palabrasNivel.length)];
+            this.palabrasUsadas.add(primeraPalabra.palabra);
+            return primeraPalabra;
 
-            return palabraSeleccionada;
         } catch (error) {
             console.error('Error al obtener palabra:', error);
             return this.obtenerPalabraLocal(nivel);
@@ -161,10 +158,18 @@ class DiccionarioAPI {
             }
         }
 
+        // Buscar primero en palabras base
+        const definicionLocal = this.buscarDefinicionLocal(palabra);
+        if (definicionLocal.definicion !== "No se encontró definición para esta palabra.") {
+            return definicionLocal;
+        }
+
         try {
-            // Intentar obtener del DRAE usando el proxy
-            const response = await fetch(`${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + encodeURIComponent(palabra))}`, {
-                headers: CONFIG.API.HEADERS
+            // Si no se encuentra localmente, intentar con el DRAE
+            const url = `${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + encodeURIComponent(palabra))}`;
+            const response = await fetch(url, {
+                headers: CONFIG.API.HEADERS,
+                mode: 'cors'
             });
 
             if (response.ok) {
@@ -186,8 +191,7 @@ class DiccionarioAPI {
             console.error('Error al buscar definición en DRAE:', error);
         }
 
-        // Si falla, buscar en palabras base
-        return this.buscarDefinicionLocal(palabra);
+        return definicionLocal;
     }
 
     buscarDefinicionLocal(palabra) {
