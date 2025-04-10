@@ -57,65 +57,62 @@ const palabrasBase = {
 class DiccionarioAPI {
     constructor() {
         this.palabrasUsadas = new Set();
-        this.palabrasBase = {
+        this.palabrasCache = {
             facil: [],
             medio: [],
             dificil: []
         };
-        this.palabrasCargadas = false;
+        this.apiUrl = 'https://rae-api.herokuapp.com/'; // URL base de la API
     }
 
-    async inicializarDiccionario() {
-        if (this.palabrasCargadas) return;
-
-        // Primero intentar cargar del caché
-        if (this.cargarDeCache()) {
-            return;
-        }
-
+    async inicializarPalabras() {
         try {
-            // URL de la API de la RAE (ejemplo)
-            const response = await fetch('https://api.dictionaryapi.dev/api/v2/entries/es/random?count=150');
-            const palabras = await response.json();
+            // Obtener 50 palabras aleatorias para cada nivel
+            const palabras = await this.obtenerPalabrasAleatorias(150);
             
-            // Procesar las palabras recibidas
-            palabras.forEach(palabraData => {
-                const palabra = palabraData.word;
-                const definicion = palabraData.meanings?.[0]?.definitions?.[0]?.definition || 'Sin definición disponible';
+            // Clasificar palabras por dificultad
+            palabras.forEach(palabra => {
                 const dificultad = this.determinarDificultad(palabra);
-                
-                this.palabrasBase[dificultad].push({
-                    palabra: palabra,
-                    definicion: definicion
-                });
+                if (this.palabrasCache[dificultad].length < 50) {
+                    this.palabrasCache[dificultad].push(palabra);
+                }
             });
 
-            // Si no hay suficientes palabras, usar el respaldo
-            if (this.contarPalabrasTotal() < 50) {
-                const palabrasRespaldo = this.obtenerPalabrasRespaldo();
-                for (const nivel in palabrasRespaldo) {
-                    this.palabrasBase[nivel] = [
-                        ...this.palabrasBase[nivel],
-                        ...palabrasRespaldo[nivel]
-                    ];
-                }
-            }
-
-            this.palabrasCargadas = true;
-            this.guardarEnCache();
+            return true;
         } catch (error) {
-            console.error('Error al cargar el diccionario:', error);
-            this.palabrasBase = this.obtenerPalabrasRespaldo();
-            this.palabrasCargadas = true;
+            console.error('Error al inicializar palabras:', error);
+            // Si falla, usar palabras de respaldo
+            this.palabrasCache = palabrasBase;
+            return false;
         }
     }
 
-    contarPalabrasTotal() {
-        return Object.values(this.palabrasBase).reduce((total, nivel) => total + nivel.length, 0);
+    async obtenerPalabrasAleatorias(cantidad) {
+        const palabras = [];
+        for (let i = 0; i < cantidad; i++) {
+            try {
+                const response = await fetch(`${this.apiUrl}/random`);
+                if (!response.ok) throw new Error('Error en la respuesta de la API');
+                
+                const data = await response.json();
+                if (data && data.word) {
+                    palabras.push({
+                        palabra: data.word,
+                        definicion: data.definition || 'Definición no disponible'
+                    });
+                }
+            } catch (error) {
+                console.warn('Error al obtener palabra:', error);
+            }
+            // Pequeña pausa para no sobrecargar la API
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        return palabras;
     }
 
-    determinarDificultad(palabra) {
-        // Criterios de dificultad basados en características de la palabra
+    determinarDificultad(palabraObj) {
+        const palabra = palabraObj.palabra;
+        // Criterios de dificultad
         const longitud = palabra.length;
         const tieneCaracteresEspeciales = /[áéíóúñü]/i.test(palabra);
         const tieneGruposConsonantes = /(br|bl|pr|pl|dr|tr|gr|gl|cr|cl|fr|fl)/i.test(palabra);
@@ -129,47 +126,20 @@ class DiccionarioAPI {
         }
     }
 
-    guardarEnCache() {
-        try {
-            localStorage.setItem('diccionarioCache', JSON.stringify({
-                palabras: this.palabrasBase,
-                timestamp: Date.now()
-            }));
-        } catch (error) {
-            console.warn('Error al guardar en caché:', error);
-        }
-    }
-
-    cargarDeCache() {
-        try {
-            const cache = localStorage.getItem('diccionarioCache');
-            if (cache) {
-                const data = JSON.parse(cache);
-                const tiempoTranscurrido = Date.now() - data.timestamp;
-                
-                if (tiempoTranscurrido < CONFIG.API.CACHE_DURATION) {
-                    this.palabrasBase = data.palabras;
-                    this.palabrasCargadas = true;
-                    return true;
-                }
-            }
-        } catch (error) {
-            console.warn('Error al cargar del caché:', error);
-        }
-        return false;
-    }
-
     async obtenerPalabra(nivel) {
-        if (!this.palabrasCargadas) {
-            await this.inicializarDiccionario();
+        // Si no hay palabras en caché para este nivel, intentar inicializar
+        if (this.palabrasCache[nivel].length === 0) {
+            await this.inicializarPalabras();
         }
 
-        const palabrasNivel = this.palabrasBase[nivel];
+        const palabrasNivel = this.palabrasCache[nivel];
         const palabrasDisponibles = palabrasNivel.filter(p => !this.palabrasUsadas.has(p.palabra));
 
         if (palabrasDisponibles.length === 0) {
+            // Si no hay palabras disponibles, reiniciar y obtener nuevas
             this.palabrasUsadas.clear();
-            return palabrasNivel[Math.floor(Math.random() * palabrasNivel.length)];
+            await this.inicializarPalabras();
+            return this.obtenerPalabra(nivel);
         }
 
         const indice = Math.floor(Math.random() * palabrasDisponibles.length);
@@ -180,31 +150,34 @@ class DiccionarioAPI {
     }
 
     async buscarDefinicion(palabra) {
-        if (!this.palabrasCargadas) {
-            if (!this.cargarDeCache()) {
-                await this.inicializarDiccionario();
+        try {
+            const response = await fetch(`${this.apiUrl}/define?word=${encodeURIComponent(palabra)}`);
+            if (!response.ok) throw new Error('Palabra no encontrada');
+            
+            const data = await response.json();
+            return {
+                palabra: palabra,
+                definicion: data.definition || 'Definición no disponible'
+            };
+        } catch (error) {
+            console.warn('Error al buscar definición:', error);
+            // Buscar en caché local
+            for (const nivel in this.palabrasCache) {
+                const encontrada = this.palabrasCache[nivel].find(item => 
+                    item.palabra.toLowerCase() === palabra.toLowerCase()
+                );
+                if (encontrada) return encontrada;
             }
+            
+            return {
+                palabra: palabra,
+                definicion: "No se encontró definición para esta palabra."
+            };
         }
-
-        for (const nivel in this.palabrasBase) {
-            const encontrada = this.palabrasBase[nivel].find(item => 
-                item.palabra.toLowerCase() === palabra.toLowerCase()
-            );
-            if (encontrada) return encontrada;
-        }
-        
-        return {
-            palabra: palabra,
-            definicion: "No se encontró definición para esta palabra."
-        };
     }
 
     reiniciarPalabras() {
         this.palabrasUsadas.clear();
-    }
-
-    obtenerPalabrasRespaldo() {
-        return palabrasBase;
     }
 }
 

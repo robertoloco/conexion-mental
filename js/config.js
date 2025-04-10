@@ -13,9 +13,10 @@ export const CONFIG = {
         dificil: ['avanzado', 'complejo', 'experto']
     },
     API: {
-        URL: 'https://api.dictionaryapi.dev/api/v2/entries/es',
-        CACHE_DURATION: 24 * 60 * 60 * 1000, // 24 horas en milisegundos
-        PALABRAS_POR_NIVEL: 50 // Número de palabras a mantener por nivel
+        URL: 'https://rae-api.herokuapp.com',
+        PALABRAS_POR_NIVEL: 50,
+        DELAY_ENTRE_LLAMADAS: 100, // milisegundos
+        MAX_INTENTOS: 3
     }
 };
 
