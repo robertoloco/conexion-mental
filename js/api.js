@@ -74,37 +74,41 @@ class DiccionarioAPI {
         // Seleccionar palabra aleatoria
         const indice = Math.floor(Math.random() * palabrasDisponibles.length);
         const palabraSeleccionada = palabrasDisponibles[indice];
-        
-        try {
-            // Intentar obtener definición de la API
-            const definicionAPI = await this.obtenerDefinicionAPI(palabraSeleccionada.palabra);
-            if (definicionAPI) {
-                this.palabrasUsadas.add(palabraSeleccionada.palabra);
-                return {
-                    palabra: palabraSeleccionada.palabra,
-                    definicion: definicionAPI,
-                    categoria: nivel
-                };
-            }
-        } catch (error) {
-            console.warn('Error al obtener definición de API:', error);
+        this.palabrasUsadas.add(palabraSeleccionada.palabra);
+
+        // Primero usar la definición local
+        return palabraSeleccionada;
+    }
+
+    async buscarDefinicion(palabra) {
+        // Primero buscar en palabras base
+        for (const nivel in this.palabrasBase) {
+            const encontrada = this.palabrasBase[nivel].find(item => 
+                item.palabra.toLowerCase() === palabra.toLowerCase()
+            );
+            if (encontrada) return encontrada;
         }
 
-        // Si falla la API, usar definición local
-        this.palabrasUsadas.add(palabraSeleccionada.palabra);
-        return palabraSeleccionada;
+        // Si no se encuentra localmente y está en caché, usar caché
+        if (this.cache.has(palabra)) {
+            const cached = this.cache.get(palabra);
+            if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
+                return {
+                    palabra: palabra,
+                    definicion: cached.data
+                };
+            }
+        }
+
+        // Si no se encuentra en ningún lado, devolver mensaje por defecto
+        return {
+            palabra: palabra,
+            definicion: "No se encontró definición para esta palabra."
+        };
     }
 
     async obtenerDefinicionAPI(palabra) {
         try {
-            // Verificar caché
-            if (this.cache.has(palabra)) {
-                const cached = this.cache.get(palabra);
-                if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
-                    return cached.data;
-                }
-            }
-
             const response = await fetch(`${CONFIG.API.URL}${encodeURIComponent(palabra)}`);
             if (!response.ok) {
                 throw new Error('No se encontró la palabra en la API');
@@ -127,45 +131,6 @@ class DiccionarioAPI {
             console.warn('Error al obtener definición:', error);
             return null;
         }
-    }
-
-    async buscarDefinicion(palabra) {
-        // Verificar caché
-        if (this.cache.has(palabra)) {
-            const cached = this.cache.get(palabra);
-            if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
-                return {
-                    palabra: palabra,
-                    definicion: cached.data
-                };
-            }
-        }
-
-        try {
-            // Intentar obtener de la API
-            const definicionAPI = await this.obtenerDefinicionAPI(palabra);
-            if (definicionAPI) {
-                return {
-                    palabra: palabra,
-                    definicion: definicionAPI
-                };
-            }
-        } catch (error) {
-            console.warn('Error al buscar definición en API:', error);
-        }
-
-        // Si falla la API, buscar en palabras base
-        for (const nivel in this.palabrasBase) {
-            const encontrada = this.palabrasBase[nivel].find(item => 
-                item.palabra.toLowerCase() === palabra.toLowerCase()
-            );
-            if (encontrada) return encontrada;
-        }
-        
-        return {
-            palabra: palabra,
-            definicion: "No se encontró definición para esta palabra."
-        };
     }
 
     reiniciarPalabras() {

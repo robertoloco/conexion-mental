@@ -9,8 +9,7 @@ export const CONFIG = {
     },
     API: {
         URL: 'https://api.dictionaryapi.dev/api/v2/entries/es/',
-        CACHE_TIME: 3600, // 1 hora en segundos
-        MAX_RETRIES: 3
+        CACHE_TIME: 3600 // 1 hora en segundos
     },
     CATEGORIAS: {
         facil: ['básico', 'simple', 'común'],
