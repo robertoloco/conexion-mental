@@ -62,27 +62,46 @@ class DiccionarioAPI {
             medio: [],
             dificil: []
         };
-        // Inicializar con palabras base
-        for (const nivel in palabrasBase) {
-            this.palabrasCache[nivel] = [...palabrasBase[nivel]];
+        this.debug = true;
+        this.rae = null;
+        this.inicializarRAE();
+    }
+
+    async inicializarRAE() {
+        try {
+            // Importar la librería RAE
+            const RAE = await import('https://cdn.jsdelivr.net/npm/rae-api@1.0.0/dist/rae.min.js');
+            this.rae = new RAE.default(this.debug);
+        } catch (error) {
+            console.error('Error al inicializar RAE:', error);
+            // Inicializar con palabras base como respaldo
+            for (const nivel in palabrasBase) {
+                this.palabrasCache[nivel] = [...palabrasBase[nivel]];
+            }
         }
     }
 
     async obtenerPalabraAleatoria() {
         try {
-            const response = await fetch('https://rae-api.herokuapp.com/random');
-            if (!response.ok) throw new Error('Error en la respuesta de la API');
-            
-            const data = await response.json();
-            if (!data || !data.word) throw new Error('Formato de respuesta inválido');
+            if (!this.rae) {
+                throw new Error('RAE no inicializado');
+            }
+
+            // Obtener palabra del día como en el ejemplo
+            const palabraDia = await this.rae.getWordOfTheDay();
+            const definicion = await this.rae.searchWord(palabraDia);
 
             return {
-                palabra: data.word,
-                definicion: data.definition || 'Definición no disponible'
+                palabra: palabraDia,
+                definicion: definicion || 'Definición no disponible'
             };
         } catch (error) {
             console.warn('Error al obtener palabra aleatoria:', error);
-            return null;
+            // Si falla, devolver una palabra aleatoria del respaldo
+            const nivel = ['facil', 'medio', 'dificil'][Math.floor(Math.random() * 3)];
+            const palabras = palabrasBase[nivel];
+            const palabraAleatoria = palabras[Math.floor(Math.random() * palabras.length)];
+            return palabraAleatoria;
         }
     }
 
@@ -113,8 +132,12 @@ class DiccionarioAPI {
             return palabraSeleccionada;
         }
 
-        // Si no hay palabras disponibles, intentar obtener una nueva de la API
+        // Si no hay palabras disponibles, intentar obtener nuevas de la RAE
         try {
+            if (!this.rae) {
+                await this.inicializarRAE();
+            }
+
             // Intentar hasta 3 veces obtener una palabra del nivel correcto
             for (let intento = 0; intento < 3; intento++) {
                 const nuevaPalabra = await this.obtenerPalabraAleatoria();
@@ -139,13 +162,14 @@ class DiccionarioAPI {
 
     async buscarDefinicion(palabra) {
         try {
-            const response = await fetch(`https://rae-api.herokuapp.com/define?word=${encodeURIComponent(palabra)}`);
-            if (!response.ok) throw new Error('Palabra no encontrada');
-            
-            const data = await response.json();
+            if (!this.rae) {
+                await this.inicializarRAE();
+            }
+
+            const definicion = await this.rae.searchWord(palabra);
             return {
                 palabra: palabra,
-                definicion: data.definition || 'Definición no disponible'
+                definicion: definicion || 'Definición no disponible'
             };
         } catch (error) {
             console.warn('Error al buscar definición:', error);

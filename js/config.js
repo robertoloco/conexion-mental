@@ -13,10 +13,9 @@ export const CONFIG = {
         dificil: ['avanzado', 'complejo', 'experto']
     },
     API: {
-        URL: 'https://rae-api.herokuapp.com',
-        PALABRAS_POR_NIVEL: 50,
-        DELAY_ENTRE_LLAMADAS: 100, // milisegundos
-        MAX_INTENTOS: 3
+        DELAY_ENTRE_LLAMADAS: 1000, // 1 segundo entre llamadas
+        MAX_INTENTOS: 3,
+        DEBUG: true
     }
 };
 
