@@ -62,57 +62,31 @@ class DiccionarioAPI {
             medio: [],
             dificil: []
         };
-        this.apiUrl = 'https://rae-api.herokuapp.com/'; // URL base de la API
+        // Inicializar con palabras base
+        for (const nivel in palabrasBase) {
+            this.palabrasCache[nivel] = [...palabrasBase[nivel]];
+        }
     }
 
-    async inicializarPalabras() {
+    async obtenerPalabraAleatoria() {
         try {
-            // Obtener 50 palabras aleatorias para cada nivel
-            const palabras = await this.obtenerPalabrasAleatorias(150);
+            const response = await fetch('https://rae-api.herokuapp.com/random');
+            if (!response.ok) throw new Error('Error en la respuesta de la API');
             
-            // Clasificar palabras por dificultad
-            palabras.forEach(palabra => {
-                const dificultad = this.determinarDificultad(palabra);
-                if (this.palabrasCache[dificultad].length < 50) {
-                    this.palabrasCache[dificultad].push(palabra);
-                }
-            });
+            const data = await response.json();
+            if (!data || !data.word) throw new Error('Formato de respuesta inválido');
 
-            return true;
+            return {
+                palabra: data.word,
+                definicion: data.definition || 'Definición no disponible'
+            };
         } catch (error) {
-            console.error('Error al inicializar palabras:', error);
-            // Si falla, usar palabras de respaldo
-            this.palabrasCache = palabrasBase;
-            return false;
+            console.warn('Error al obtener palabra aleatoria:', error);
+            return null;
         }
     }
 
-    async obtenerPalabrasAleatorias(cantidad) {
-        const palabras = [];
-        for (let i = 0; i < cantidad; i++) {
-            try {
-                const response = await fetch(`${this.apiUrl}/random`);
-                if (!response.ok) throw new Error('Error en la respuesta de la API');
-                
-                const data = await response.json();
-                if (data && data.word) {
-                    palabras.push({
-                        palabra: data.word,
-                        definicion: data.definition || 'Definición no disponible'
-                    });
-                }
-            } catch (error) {
-                console.warn('Error al obtener palabra:', error);
-            }
-            // Pequeña pausa para no sobrecargar la API
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        return palabras;
-    }
-
-    determinarDificultad(palabraObj) {
-        const palabra = palabraObj.palabra;
-        // Criterios de dificultad
+    determinarDificultad(palabra) {
         const longitud = palabra.length;
         const tieneCaracteresEspeciales = /[áéíóúñü]/i.test(palabra);
         const tieneGruposConsonantes = /(br|bl|pr|pl|dr|tr|gr|gl|cr|cl|fr|fl)/i.test(palabra);
@@ -127,31 +101,45 @@ class DiccionarioAPI {
     }
 
     async obtenerPalabra(nivel) {
-        // Si no hay palabras en caché para este nivel, intentar inicializar
-        if (this.palabrasCache[nivel].length === 0) {
-            await this.inicializarPalabras();
-        }
-
+        // Primero intentar obtener una palabra del caché
         const palabrasNivel = this.palabrasCache[nivel];
         const palabrasDisponibles = palabrasNivel.filter(p => !this.palabrasUsadas.has(p.palabra));
 
-        if (palabrasDisponibles.length === 0) {
-            // Si no hay palabras disponibles, reiniciar y obtener nuevas
-            this.palabrasUsadas.clear();
-            await this.inicializarPalabras();
-            return this.obtenerPalabra(nivel);
+        // Si hay palabras disponibles en caché, usar una de ellas
+        if (palabrasDisponibles.length > 0) {
+            const indice = Math.floor(Math.random() * palabrasDisponibles.length);
+            const palabraSeleccionada = palabrasDisponibles[indice];
+            this.palabrasUsadas.add(palabraSeleccionada.palabra);
+            return palabraSeleccionada;
         }
 
-        const indice = Math.floor(Math.random() * palabrasDisponibles.length);
-        const palabraSeleccionada = palabrasDisponibles[indice];
-        this.palabrasUsadas.add(palabraSeleccionada.palabra);
+        // Si no hay palabras disponibles, intentar obtener una nueva de la API
+        try {
+            // Intentar hasta 3 veces obtener una palabra del nivel correcto
+            for (let intento = 0; intento < 3; intento++) {
+                const nuevaPalabra = await this.obtenerPalabraAleatoria();
+                if (nuevaPalabra && this.determinarDificultad(nuevaPalabra.palabra) === nivel) {
+                    this.palabrasUsadas.add(nuevaPalabra.palabra);
+                    this.palabrasCache[nivel].push(nuevaPalabra);
+                    return nuevaPalabra;
+                }
+                // Pequeña pausa entre intentos
+                await new Promise(resolve => setTimeout(resolve, CONFIG.API.DELAY_ENTRE_LLAMADAS));
+            }
+        } catch (error) {
+            console.warn('Error al obtener nueva palabra:', error);
+        }
 
-        return palabraSeleccionada;
+        // Si todo falla, reiniciar palabras usadas y devolver una palabra base
+        this.palabrasUsadas.clear();
+        const palabraBase = palabrasBase[nivel][Math.floor(Math.random() * palabrasBase[nivel].length)];
+        this.palabrasUsadas.add(palabraBase.palabra);
+        return palabraBase;
     }
 
     async buscarDefinicion(palabra) {
         try {
-            const response = await fetch(`${this.apiUrl}/define?word=${encodeURIComponent(palabra)}`);
+            const response = await fetch(`https://rae-api.herokuapp.com/define?word=${encodeURIComponent(palabra)}`);
             if (!response.ok) throw new Error('Palabra no encontrada');
             
             const data = await response.json();
