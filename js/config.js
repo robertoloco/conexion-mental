@@ -8,20 +8,20 @@ export const CONFIG = {
         dificil: 'Difícil'
     },
     API: {
-        DICTIONARY: 'https://api.datamuse.com/words?sp=',
-        PALABRAS: 'https://api.datamuse.com/words?ml=',
-        WIKTIONARY: 'https://es.wiktionary.org/api/rest_v1/page/definition/',
+        DRAE: 'https://dle.rae.es/data/',
+        BACKUP: 'https://api.dictionaryapi.dev/api/v2/entries/es/',
         CACHE_TIME: 3600, // 1 hora en segundos
         MAX_RETRIES: 3,
         HEADERS: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Origin': 'https://dle.rae.es'
         }
     },
     CATEGORIAS: {
-        facil: ['common', 'basic', 'simple'],
-        medio: ['medium', 'standard', 'regular'],
-        dificil: ['hard', 'complex', 'advanced']
+        facil: ['básico', 'simple', 'común'],
+        medio: ['intermedio', 'estándar', 'regular'],
+        dificil: ['avanzado', 'complejo', 'experto']
     }
 };
 

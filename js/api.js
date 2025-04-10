@@ -1,6 +1,6 @@
 import { CONFIG } from './config.js';
 
-// Palabras base para usar cuando la API no está disponible
+// Palabras base en español
 const palabrasBase = {
     facil: [
         { palabra: 'casa', definicion: 'Edificio destinado a vivienda' },
@@ -12,7 +12,12 @@ const palabrasBase = {
         { palabra: 'ciudad', definicion: 'Conjunto de edificios y calles regidos por un ayuntamiento' },
         { palabra: 'mesa', definicion: 'Mueble formado por una superficie plana sostenida por patas' },
         { palabra: 'sol', definicion: 'Estrella luminosa, centro de nuestro sistema planetario' },
-        { palabra: 'comida', definicion: 'Lo que se come y bebe para nutrirse' }
+        { palabra: 'comida', definicion: 'Lo que se come y bebe para nutrirse' },
+        { palabra: 'pelota', definicion: 'Bola hecha de cuero, goma u otro material flexible' },
+        { palabra: 'árbol', definicion: 'Planta de tronco leñoso que se ramifica a cierta altura' },
+        { palabra: 'coche', definicion: 'Vehículo con motor para transportar personas' },
+        { palabra: 'flor', definicion: 'Parte de la planta que contiene los órganos reproductores' },
+        { palabra: 'playa', definicion: 'Ribera del mar formada por arena' }
     ],
     medio: [
         { palabra: 'conexión', definicion: 'Enlace, atadura, trabazón, concatenación de una cosa con otra' },
@@ -24,7 +29,11 @@ const palabrasBase = {
         { palabra: 'sincronía', definicion: 'Coincidencia de hechos o fenómenos en el tiempo' },
         { palabra: 'analogía', definicion: 'Relación de semejanza entre cosas distintas' },
         { palabra: 'concepto', definicion: 'Idea que concibe o forma el entendimiento' },
-        { palabra: 'enfático', definicion: 'Que se expresa con énfasis o da importancia a lo que se dice' }
+        { palabra: 'enfático', definicion: 'Que se expresa con énfasis o da importancia a lo que se dice' },
+        { palabra: 'intuición', definicion: 'Facultad de comprender las cosas instantáneamente sin razonamiento' },
+        { palabra: 'paradoja', definicion: 'Idea extraña u opuesta a la común opinión y al sentir de las personas' },
+        { palabra: 'sinergia', definicion: 'Acción conjunta de varios órganos en la realización de una función' },
+        { palabra: 'armonía', definicion: 'Conveniente proporción y correspondencia de unas cosas con otras' }
     ],
     dificil: [
         { palabra: 'inefable', definicion: 'Que no se puede explicar con palabras' },
@@ -36,144 +45,115 @@ const palabrasBase = {
         { palabra: 'cacofónico', definicion: 'Que suena mal o tiene un efecto sonoro desagradable' },
         { palabra: 'epifanía', definicion: 'Manifestación o revelación de algo' },
         { palabra: 'ambivalencia', definicion: 'Estado de ánimo en que coexisten dos emociones o sentimientos opuestos' },
-        { palabra: 'meticuloso', definicion: 'Que se hace con gran cuidado, detalle y atención' }
+        { palabra: 'meticuloso', definicion: 'Que se hace con gran cuidado, detalle y atención' },
+        { palabra: 'paradigma', definicion: 'Ejemplo o modelo de algo' },
+        { palabra: 'sinécdoque', definicion: 'Figura retórica que consiste en extender o restringir el significado de las palabras' },
+        { palabra: 'anacrónico', definicion: 'Que está en desacuerdo con la época presente' },
+        { palabra: 'dialéctica', definicion: 'Arte de dialogar, argumentar y discutir' },
+        { palabra: 'ontología', definicion: 'Parte de la metafísica que trata del ser en general y de sus propiedades' }
     ]
 };
 
 class DiccionarioAPI {
     constructor() {
-        this.cache = new Map();
+        this.palabrasUsadas = new Set();
         this.palabrasBase = palabrasBase;
-        this.fuentes = [
-            this.obtenerPalabraAPI.bind(this),
-            this.obtenerPalabraRespaldo.bind(this),
-            this.obtenerPalabraWiktionary.bind(this)
-        ];
+        this.cache = new Map();
     }
 
     async obtenerPalabra(nivel) {
-        let intentos = 0;
-        while (intentos < CONFIG.API.MAX_RETRIES) {
-            try {
-                // Intentar obtener palabra de todas las fuentes en orden
-                for (const fuente of this.fuentes) {
-                    try {
-                        const palabra = await fuente(nivel);
-                        if (palabra) {
-                            // Almacenar en caché
-                            this.cache.set(palabra.palabra, {
-                                data: palabra,
-                                timestamp: Date.now()
-                            });
-                            return palabra;
-                        }
-                    } catch (error) {
-                        console.warn(`Fuente fallida: ${error.message}`);
-                        continue;
-                    }
-                }
-                
-                // Si todas las fuentes fallan, usar palabras locales
-                return this.obtenerPalabraLocal(nivel);
-            } catch (error) {
-                console.error(`Intento ${intentos + 1} fallido:`, error);
-                intentos++;
-                if (intentos === CONFIG.API.MAX_RETRIES) {
-                    return this.obtenerPalabraLocal(nivel);
-                }
-                await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+            // Primero intentar obtener una palabra del DRAE
+            const palabra = await this.obtenerPalabraDRAE();
+            if (palabra && !this.palabrasUsadas.has(palabra.palabra)) {
+                this.palabrasUsadas.add(palabra.palabra);
+                return palabra;
             }
-        }
-    }
 
-    async obtenerPalabraAPI(nivel) {
-        try {
-            // Obtener una categoría aleatoria para el nivel
-            const categorias = CONFIG.CATEGORIAS[nivel];
-            const categoria = categorias[Math.floor(Math.random() * categorias.length)];
-            
-            // Usar Datamuse API para obtener palabras
-            const response = await fetch(`${CONFIG.API.DICTIONARY}*&max=50`);
-            if (!response.ok) return null;
-            
-            const palabras = await response.json();
-            if (!palabras || palabras.length === 0) return null;
-            
-            // Seleccionar una palabra aleatoria
-            const palabraSeleccionada = palabras[Math.floor(Math.random() * palabras.length)];
-            
-            // Obtener definición
-            const definicionResponse = await fetch(`${CONFIG.API.PALABRAS}${encodeURIComponent(palabraSeleccionada.word)}&max=1`);
-            if (!definicionResponse.ok) return null;
-            
-            const definiciones = await definicionResponse.json();
-            const definicion = definiciones.length > 0 ? definiciones[0].defs : 'No se encontró definición';
-            
-            return {
-                palabra: palabraSeleccionada.word,
-                definicion: definicion,
-                categoria: categoria
-            };
+            // Si no funciona, usar palabras base
+            const palabrasNivel = this.palabrasBase[nivel];
+            const palabrasDisponibles = palabrasNivel.filter(p => !this.palabrasUsadas.has(p.palabra));
+
+            if (palabrasDisponibles.length === 0) {
+                this.palabrasUsadas.clear();
+                return null;
+            }
+
+            const indice = Math.floor(Math.random() * palabrasDisponibles.length);
+            const palabraSeleccionada = palabrasDisponibles[indice];
+            this.palabrasUsadas.add(palabraSeleccionada.palabra);
+
+            return palabraSeleccionada;
         } catch (error) {
-            console.error('Error en obtenerPalabraAPI:', error);
-            return null;
+            console.error('Error al obtener palabra:', error);
+            return this.obtenerPalabraLocal(nivel);
         }
     }
 
-    async obtenerPalabraRespaldo(nivel) {
+    async obtenerPalabraDRAE() {
         try {
-            // Usar Datamuse API con un enfoque diferente
-            const response = await fetch(`${CONFIG.API.PALABRAS}${nivel}&max=50`);
-            if (!response.ok) return null;
-            
-            const palabras = await response.json();
-            if (!palabras || palabras.length === 0) return null;
-            
-            const palabraSeleccionada = palabras[Math.floor(Math.random() * palabras.length)];
-            
-            return {
-                palabra: palabraSeleccionada.word,
-                definicion: palabraSeleccionada.defs ? palabraSeleccionada.defs[0] : 'No se encontró definición',
-                categoria: 'general'
-            };
-        } catch (error) {
-            console.error('Error en obtenerPalabraRespaldo:', error);
-            return null;
-        }
-    }
-
-    async obtenerPalabraWiktionary(nivel) {
-        try {
-            // Obtener una palabra aleatoria de las palabras base
-            const palabraLocal = this.obtenerPalabraLocal(nivel);
-            
-            // Intentar obtener su definición de Wiktionary
-            const response = await fetch(`${CONFIG.API.WIKTIONARY}${encodeURIComponent(palabraLocal.palabra)}`, {
+            // Obtener una palabra aleatoria
+            const response = await fetch(`${CONFIG.API.DRAE}random`, {
                 headers: CONFIG.API.HEADERS
             });
-            
-            if (!response.ok) return palabraLocal;
-            
+
+            if (!response.ok) {
+                throw new Error('Error al obtener palabra del DRAE');
+            }
+
             const data = await response.json();
+            
+            // Obtener la definición
+            const definicionResponse = await fetch(`${CONFIG.API.DRAE}${data.id}`, {
+                headers: CONFIG.API.HEADERS
+            });
+
+            if (!definicionResponse.ok) {
+                throw new Error('Error al obtener definición del DRAE');
+            }
+
+            const definicionData = await definicionResponse.json();
+            
             return {
-                palabra: palabraLocal.palabra,
-                definicion: data.definition || palabraLocal.definicion,
-                categoria: 'general'
+                palabra: data.header,
+                definicion: this.formatearDefinicionDRAE(definicionData),
+                categoria: 'DRAE'
             };
         } catch (error) {
-            console.error('Error en obtenerPalabraWiktionary:', error);
+            console.error('Error en DRAE API:', error);
             return null;
+        }
+    }
+
+    formatearDefinicionDRAE(data) {
+        try {
+            if (data && data.definiciones && data.definiciones.length > 0) {
+                return data.definiciones[0].definicion;
+            }
+            return "No se encontró definición";
+        } catch (error) {
+            console.error('Error al formatear definición:', error);
+            return "Error al obtener definición";
         }
     }
 
     obtenerPalabraLocal(nivel) {
         const palabras = this.palabrasBase[nivel];
-        const indice = Math.floor(Math.random() * palabras.length);
-        return palabras[indice];
+        const palabrasDisponibles = palabras.filter(p => !this.palabrasUsadas.has(p.palabra));
+        
+        if (palabrasDisponibles.length === 0) {
+            this.palabrasUsadas.clear();
+            return palabras[Math.floor(Math.random() * palabras.length)];
+        }
+
+        const indice = Math.floor(Math.random() * palabrasDisponibles.length);
+        const palabraSeleccionada = palabrasDisponibles[indice];
+        this.palabrasUsadas.add(palabraSeleccionada.palabra);
+        return palabraSeleccionada;
     }
 
     async buscarDefinicion(palabra) {
-        // Verificar cache
+        // Verificar caché
         if (this.cache.has(palabra)) {
             const cached = this.cache.get(palabra);
             if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
@@ -182,52 +162,32 @@ class DiccionarioAPI {
         }
 
         try {
-            // Intentar obtener definición de la API principal
-            const definicion = await this.buscarDefinicionAPI(palabra);
-            if (definicion) return definicion;
+            // Intentar obtener del DRAE
+            const response = await fetch(`${CONFIG.API.DRAE}${encodeURIComponent(palabra)}`, {
+                headers: CONFIG.API.HEADERS
+            });
 
-            // Si falla, intentar con la API de respaldo
-            const definicionRespaldo = await this.buscarDefinicionRespaldo(palabra);
-            if (definicionRespaldo) return definicionRespaldo;
+            if (response.ok) {
+                const data = await response.json();
+                const definicion = {
+                    palabra: palabra,
+                    definicion: this.formatearDefinicionDRAE(data)
+                };
 
-            // Si todo falla, buscar en datos locales
-            return this.buscarDefinicionLocal(palabra);
+                // Guardar en caché
+                this.cache.set(palabra, {
+                    data: definicion,
+                    timestamp: Date.now()
+                });
+
+                return definicion;
+            }
         } catch (error) {
-            console.error('Error al buscar definición:', error);
-            return this.buscarDefinicionLocal(palabra);
+            console.error('Error al buscar definición en DRAE:', error);
         }
-    }
 
-    async buscarDefinicionAPI(palabra) {
-        try {
-            const response = await fetch(`${CONFIG.API.DICTIONARY}${encodeURIComponent(palabra)}`);
-            if (!response.ok) return null;
-
-            const data = await response.json();
-            return {
-                palabra: data[0].word,
-                definicion: data[0].meanings[0].definitions[0].definition
-            };
-        } catch (error) {
-            console.error('Error en buscarDefinicionAPI:', error);
-            return null;
-        }
-    }
-
-    async buscarDefinicionRespaldo(palabra) {
-        try {
-            const response = await fetch(`${CONFIG.API.PALABRAS}${encodeURIComponent(palabra)}`);
-            if (!response.ok) return null;
-
-            const data = await response.json();
-            return {
-                palabra: data.word,
-                definicion: data.definition
-            };
-        } catch (error) {
-            console.error('Error en buscarDefinicionRespaldo:', error);
-            return null;
-        }
+        // Si falla, buscar en palabras base
+        return this.buscarDefinicionLocal(palabra);
     }
 
     buscarDefinicionLocal(palabra) {
@@ -242,6 +202,11 @@ class DiccionarioAPI {
             palabra: palabra,
             definicion: "No se encontró definición para esta palabra."
         };
+    }
+
+    reiniciarPalabras() {
+        this.palabrasUsadas.clear();
+        this.cache.clear();
     }
 }
 
