@@ -62,123 +62,58 @@ class DiccionarioAPI {
     }
 
     async obtenerPalabra(nivel) {
-        try {
-            // Intentar obtener palabra del DRAE solo si no hay suficientes palabras locales
-            const palabrasNivel = this.palabrasBase[nivel];
-            const palabrasDisponibles = palabrasNivel.filter(p => !this.palabrasUsadas.has(p.palabra));
+        const palabrasNivel = this.palabrasBase[nivel];
+        const palabrasDisponibles = palabrasNivel.filter(p => !this.palabrasUsadas.has(p.palabra));
 
-            // Si tenemos suficientes palabras locales, usarlas
-            if (palabrasDisponibles.length > 0) {
-                const indice = Math.floor(Math.random() * palabrasDisponibles.length);
-                const palabraSeleccionada = palabrasDisponibles[indice];
-                this.palabrasUsadas.add(palabraSeleccionada.palabra);
-                return palabraSeleccionada;
-            }
-
-            // Si no hay palabras disponibles, reiniciar y usar la primera disponible
-            this.palabrasUsadas.clear();
-            const primeraPalabra = palabrasNivel[Math.floor(Math.random() * palabrasNivel.length)];
-            this.palabrasUsadas.add(primeraPalabra.palabra);
-            return primeraPalabra;
-
-        } catch (error) {
-            console.error('Error al obtener palabra:', error);
-            return this.obtenerPalabraLocal(nivel);
-        }
-    }
-
-    async obtenerPalabraDRAE() {
-        try {
-            // Obtener una palabra aleatoria usando el proxy
-            const response = await fetch(`${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + 'random')}`, {
-                headers: CONFIG.API.HEADERS
-            });
-
-            if (!response.ok) {
-                throw new Error('Error al obtener palabra del DRAE');
-            }
-
-            const data = await response.json();
-            
-            // Obtener la definición usando el proxy
-            const definicionResponse = await fetch(`${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + data.id)}`, {
-                headers: CONFIG.API.HEADERS
-            });
-
-            if (!definicionResponse.ok) {
-                throw new Error('Error al obtener definición del DRAE');
-            }
-
-            const definicionData = await definicionResponse.json();
-            
-            return {
-                palabra: data.header,
-                definicion: this.formatearDefinicionDRAE(definicionData),
-                categoria: 'DRAE'
-            };
-        } catch (error) {
-            console.error('Error en DRAE API:', error);
-            return null;
-        }
-    }
-
-    formatearDefinicionDRAE(data) {
-        try {
-            if (data && data.definiciones && data.definiciones.length > 0) {
-                return data.definiciones[0].definicion;
-            }
-            return "No se encontró definición";
-        } catch (error) {
-            console.error('Error al formatear definición:', error);
-            return "Error al obtener definición";
-        }
-    }
-
-    obtenerPalabraLocal(nivel) {
-        const palabras = this.palabrasBase[nivel];
-        const palabrasDisponibles = palabras.filter(p => !this.palabrasUsadas.has(p.palabra));
-        
+        // Si no hay palabras disponibles, reiniciar
         if (palabrasDisponibles.length === 0) {
             this.palabrasUsadas.clear();
-            return palabras[Math.floor(Math.random() * palabras.length)];
+            return null; // Indicar que se acabaron las palabras
         }
 
+        // Seleccionar palabra aleatoria
         const indice = Math.floor(Math.random() * palabrasDisponibles.length);
         const palabraSeleccionada = palabrasDisponibles[indice];
+        
+        try {
+            // Intentar obtener definición de la API
+            const definicionAPI = await this.obtenerDefinicionAPI(palabraSeleccionada.palabra);
+            if (definicionAPI) {
+                this.palabrasUsadas.add(palabraSeleccionada.palabra);
+                return {
+                    palabra: palabraSeleccionada.palabra,
+                    definicion: definicionAPI,
+                    categoria: nivel
+                };
+            }
+        } catch (error) {
+            console.warn('Error al obtener definición de API:', error);
+        }
+
+        // Si falla la API, usar definición local
         this.palabrasUsadas.add(palabraSeleccionada.palabra);
         return palabraSeleccionada;
     }
 
-    async buscarDefinicion(palabra) {
-        // Verificar caché
-        if (this.cache.has(palabra)) {
-            const cached = this.cache.get(palabra);
-            if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
-                return cached.data;
-            }
-        }
-
-        // Buscar primero en palabras base
-        const definicionLocal = this.buscarDefinicionLocal(palabra);
-        if (definicionLocal.definicion !== "No se encontró definición para esta palabra.") {
-            return definicionLocal;
-        }
-
+    async obtenerDefinicionAPI(palabra) {
         try {
-            // Si no se encuentra localmente, intentar con el DRAE
-            const url = `${CONFIG.API.PROXY}${encodeURIComponent(CONFIG.API.DRAE + encodeURIComponent(palabra))}`;
-            const response = await fetch(url, {
-                headers: CONFIG.API.HEADERS,
-                mode: 'cors'
-            });
+            // Verificar caché
+            if (this.cache.has(palabra)) {
+                const cached = this.cache.get(palabra);
+                if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
+                    return cached.data;
+                }
+            }
 
-            if (response.ok) {
-                const data = await response.json();
-                const definicion = {
-                    palabra: palabra,
-                    definicion: this.formatearDefinicionDRAE(data)
-                };
+            const response = await fetch(`${CONFIG.API.URL}${encodeURIComponent(palabra)}`);
+            if (!response.ok) {
+                throw new Error('No se encontró la palabra en la API');
+            }
 
+            const data = await response.json();
+            if (data && data[0] && data[0].meanings && data[0].meanings[0]) {
+                const definicion = data[0].meanings[0].definitions[0].definition;
+                
                 // Guardar en caché
                 this.cache.set(palabra, {
                     data: definicion,
@@ -187,14 +122,39 @@ class DiccionarioAPI {
 
                 return definicion;
             }
+            return null;
         } catch (error) {
-            console.error('Error al buscar definición en DRAE:', error);
+            console.warn('Error al obtener definición:', error);
+            return null;
         }
-
-        return definicionLocal;
     }
 
-    buscarDefinicionLocal(palabra) {
+    async buscarDefinicion(palabra) {
+        // Verificar caché
+        if (this.cache.has(palabra)) {
+            const cached = this.cache.get(palabra);
+            if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
+                return {
+                    palabra: palabra,
+                    definicion: cached.data
+                };
+            }
+        }
+
+        try {
+            // Intentar obtener de la API
+            const definicionAPI = await this.obtenerDefinicionAPI(palabra);
+            if (definicionAPI) {
+                return {
+                    palabra: palabra,
+                    definicion: definicionAPI
+                };
+            }
+        } catch (error) {
+            console.warn('Error al buscar definición en API:', error);
+        }
+
+        // Si falla la API, buscar en palabras base
         for (const nivel in this.palabrasBase) {
             const encontrada = this.palabrasBase[nivel].find(item => 
                 item.palabra.toLowerCase() === palabra.toLowerCase()

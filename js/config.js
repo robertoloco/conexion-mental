@@ -8,14 +8,9 @@ export const CONFIG = {
         dificil: 'Difícil'
     },
     API: {
-        PROXY: 'https://corsproxy.io/?',
-        DRAE: 'https://dle.rae.es/data/',
+        URL: 'https://api.dictionaryapi.dev/api/v2/entries/es/',
         CACHE_TIME: 3600, // 1 hora en segundos
-        MAX_RETRIES: 3,
-        HEADERS: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        }
+        MAX_RETRIES: 3
     },
     CATEGORIAS: {
         facil: ['básico', 'simple', 'común'],
