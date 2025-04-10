@@ -92,21 +92,26 @@ class DiccionarioAPI {
             const categorias = CONFIG.CATEGORIAS[nivel];
             const categoria = categorias[Math.floor(Math.random() * categorias.length)];
             
-            // Intentar obtener una palabra de la API
-            const response = await fetch(`${CONFIG.API.DICTIONARY}random?category=${categoria}`, {
-                headers: {
-                    ...CONFIG.API.HEADERS,
-                    'Access-Control-Allow-Origin': '*'
-                },
-                mode: 'cors'
-            });
-            
+            // Usar Datamuse API para obtener palabras
+            const response = await fetch(`${CONFIG.API.DICTIONARY}*&max=50`);
             if (!response.ok) return null;
             
-            const data = await response.json();
+            const palabras = await response.json();
+            if (!palabras || palabras.length === 0) return null;
+            
+            // Seleccionar una palabra aleatoria
+            const palabraSeleccionada = palabras[Math.floor(Math.random() * palabras.length)];
+            
+            // Obtener definición
+            const definicionResponse = await fetch(`${CONFIG.API.PALABRAS}${encodeURIComponent(palabraSeleccionada.word)}&max=1`);
+            if (!definicionResponse.ok) return null;
+            
+            const definiciones = await definicionResponse.json();
+            const definicion = definiciones.length > 0 ? definiciones[0].defs : 'No se encontró definición';
+            
             return {
-                palabra: data.word,
-                definicion: data.definition,
+                palabra: palabraSeleccionada.word,
+                definicion: definicion,
                 categoria: categoria
             };
         } catch (error) {
@@ -117,20 +122,18 @@ class DiccionarioAPI {
 
     async obtenerPalabraRespaldo(nivel) {
         try {
-            const response = await fetch(`${CONFIG.API.PALABRAS}random?level=${nivel}`, {
-                headers: {
-                    ...CONFIG.API.HEADERS,
-                    'Access-Control-Allow-Origin': '*'
-                },
-                mode: 'cors'
-            });
-            
+            // Usar Datamuse API con un enfoque diferente
+            const response = await fetch(`${CONFIG.API.PALABRAS}${nivel}&max=50`);
             if (!response.ok) return null;
             
-            const data = await response.json();
+            const palabras = await response.json();
+            if (!palabras || palabras.length === 0) return null;
+            
+            const palabraSeleccionada = palabras[Math.floor(Math.random() * palabras.length)];
+            
             return {
-                palabra: data.word,
-                definicion: data.definition,
+                palabra: palabraSeleccionada.word,
+                definicion: palabraSeleccionada.defs ? palabraSeleccionada.defs[0] : 'No se encontró definición',
                 categoria: 'general'
             };
         } catch (error) {
@@ -141,36 +144,20 @@ class DiccionarioAPI {
 
     async obtenerPalabraWiktionary(nivel) {
         try {
-            const response = await fetch(`${CONFIG.API.WIKTIONARY}?action=query&list=random&rnnamespace=0&rnlimit=1&format=json`, {
-                headers: {
-                    ...CONFIG.API.HEADERS,
-                    'Access-Control-Allow-Origin': '*'
-                },
-                mode: 'cors'
+            // Obtener una palabra aleatoria de las palabras base
+            const palabraLocal = this.obtenerPalabraLocal(nivel);
+            
+            // Intentar obtener su definición de Wiktionary
+            const response = await fetch(`${CONFIG.API.WIKTIONARY}${encodeURIComponent(palabraLocal.palabra)}`, {
+                headers: CONFIG.API.HEADERS
             });
             
-            if (!response.ok) return null;
+            if (!response.ok) return palabraLocal;
             
             const data = await response.json();
-            const palabra = data.query.random[0].title;
-            
-            // Obtener definición
-            const definicionResponse = await fetch(`${CONFIG.API.WIKTIONARY}?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(palabra)}&format=json`, {
-                headers: {
-                    ...CONFIG.API.HEADERS,
-                    'Access-Control-Allow-Origin': '*'
-                },
-                mode: 'cors'
-            });
-            
-            if (!definicionResponse.ok) return null;
-            
-            const definicionData = await definicionResponse.json();
-            const page = Object.values(definicionData.query.pages)[0];
-            
             return {
-                palabra: palabra,
-                definicion: page.extract || 'Definición no disponible',
+                palabra: palabraLocal.palabra,
+                definicion: data.definition || palabraLocal.definicion,
                 categoria: 'general'
             };
         } catch (error) {

@@ -8,9 +8,9 @@ export const CONFIG = {
         dificil: 'Difícil'
     },
     API: {
-        DICTIONARY: 'https://api.dictionaryapi.dev/api/v2/entries/es/',
-        PALABRAS: 'https://api.palabras.dev/v1/dictionary/es/',
-        WIKTIONARY: 'https://es.wiktionary.org/w/api.php',
+        DICTIONARY: 'https://api.datamuse.com/words?sp=',
+        PALABRAS: 'https://api.datamuse.com/words?ml=',
+        WIKTIONARY: 'https://es.wiktionary.org/api/rest_v1/page/definition/',
         CACHE_TIME: 3600, // 1 hora en segundos
         MAX_RETRIES: 3,
         HEADERS: {
@@ -19,9 +19,9 @@ export const CONFIG = {
         }
     },
     CATEGORIAS: {
-        facil: ['animales', 'comida', 'casa', 'ropa', 'naturaleza', 'profesiones'],
-        medio: ['ciencia', 'tecnología', 'arte', 'deportes', 'historia', 'geografía'],
-        dificil: ['filosofía', 'psicología', 'literatura', 'medicina', 'derecho', 'economía']
+        facil: ['common', 'basic', 'simple'],
+        medio: ['medium', 'standard', 'regular'],
+        dificil: ['hard', 'complex', 'advanced']
     }
 };
 
