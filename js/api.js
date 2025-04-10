@@ -94,8 +94,13 @@ class DiccionarioAPI {
             
             // Intentar obtener una palabra de la API
             const response = await fetch(`${CONFIG.API.DICTIONARY}random?category=${categoria}`, {
-                headers: CONFIG.API.HEADERS
+                headers: {
+                    ...CONFIG.API.HEADERS,
+                    'Access-Control-Allow-Origin': '*'
+                },
+                mode: 'cors'
             });
+            
             if (!response.ok) return null;
             
             const data = await response.json();
@@ -113,8 +118,13 @@ class DiccionarioAPI {
     async obtenerPalabraRespaldo(nivel) {
         try {
             const response = await fetch(`${CONFIG.API.PALABRAS}random?level=${nivel}`, {
-                headers: CONFIG.API.HEADERS
+                headers: {
+                    ...CONFIG.API.HEADERS,
+                    'Access-Control-Allow-Origin': '*'
+                },
+                mode: 'cors'
             });
+            
             if (!response.ok) return null;
             
             const data = await response.json();
@@ -132,15 +142,27 @@ class DiccionarioAPI {
     async obtenerPalabraWiktionary(nivel) {
         try {
             const response = await fetch(`${CONFIG.API.WIKTIONARY}?action=query&list=random&rnnamespace=0&rnlimit=1&format=json`, {
-                headers: CONFIG.API.HEADERS
+                headers: {
+                    ...CONFIG.API.HEADERS,
+                    'Access-Control-Allow-Origin': '*'
+                },
+                mode: 'cors'
             });
+            
             if (!response.ok) return null;
             
             const data = await response.json();
             const palabra = data.query.random[0].title;
             
             // Obtener definición
-            const definicionResponse = await fetch(`${CONFIG.API.WIKTIONARY}?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(palabra)}&format=json`);
+            const definicionResponse = await fetch(`${CONFIG.API.WIKTIONARY}?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(palabra)}&format=json`, {
+                headers: {
+                    ...CONFIG.API.HEADERS,
+                    'Access-Control-Allow-Origin': '*'
+                },
+                mode: 'cors'
+            });
+            
             if (!definicionResponse.ok) return null;
             
             const definicionData = await definicionResponse.json();
