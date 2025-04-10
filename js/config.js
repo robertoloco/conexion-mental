@@ -10,9 +10,13 @@ export const CONFIG = {
     API: {
         DICTIONARY: 'https://api.dictionaryapi.dev/api/v2/entries/es/',
         PALABRAS: 'https://api.palabras.dev/v1/dictionary/es/',
-        WORDSAPI: 'https://wordsapiv1.p.rapidapi.com/words/',
+        WIKTIONARY: 'https://es.wiktionary.org/w/api.php',
         CACHE_TIME: 3600, // 1 hora en segundos
-        MAX_RETRIES: 3
+        MAX_RETRIES: 3,
+        HEADERS: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
     },
     CATEGORIAS: {
         facil: ['animales', 'comida', 'casa', 'ropa', 'naturaleza', 'profesiones'],

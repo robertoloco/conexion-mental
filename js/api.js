@@ -43,22 +43,37 @@ const palabrasBase = {
 class DiccionarioAPI {
     constructor() {
         this.cache = new Map();
-        this.palabrasBase = palabrasBase; // Mantener las palabras base como respaldo
+        this.palabrasBase = palabrasBase;
+        this.fuentes = [
+            this.obtenerPalabraAPI.bind(this),
+            this.obtenerPalabraRespaldo.bind(this),
+            this.obtenerPalabraWiktionary.bind(this)
+        ];
     }
 
     async obtenerPalabra(nivel) {
         let intentos = 0;
         while (intentos < CONFIG.API.MAX_RETRIES) {
             try {
-                // Intentar obtener palabra de la API principal
-                const palabra = await this.obtenerPalabraAPI(nivel);
-                if (palabra) return palabra;
+                // Intentar obtener palabra de todas las fuentes en orden
+                for (const fuente of this.fuentes) {
+                    try {
+                        const palabra = await fuente(nivel);
+                        if (palabra) {
+                            // Almacenar en caché
+                            this.cache.set(palabra.palabra, {
+                                data: palabra,
+                                timestamp: Date.now()
+                            });
+                            return palabra;
+                        }
+                    } catch (error) {
+                        console.warn(`Fuente fallida: ${error.message}`);
+                        continue;
+                    }
+                }
                 
-                // Si falla, intentar con la API de respaldo
-                const palabraRespaldo = await this.obtenerPalabraRespaldo(nivel);
-                if (palabraRespaldo) return palabraRespaldo;
-                
-                // Si todo falla, usar palabras locales
+                // Si todas las fuentes fallan, usar palabras locales
                 return this.obtenerPalabraLocal(nivel);
             } catch (error) {
                 console.error(`Intento ${intentos + 1} fallido:`, error);
@@ -66,7 +81,6 @@ class DiccionarioAPI {
                 if (intentos === CONFIG.API.MAX_RETRIES) {
                     return this.obtenerPalabraLocal(nivel);
                 }
-                // Esperar un poco antes de reintentar
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
@@ -79,7 +93,9 @@ class DiccionarioAPI {
             const categoria = categorias[Math.floor(Math.random() * categorias.length)];
             
             // Intentar obtener una palabra de la API
-            const response = await fetch(`${CONFIG.API.DICTIONARY}random?category=${categoria}`);
+            const response = await fetch(`${CONFIG.API.DICTIONARY}random?category=${categoria}`, {
+                headers: CONFIG.API.HEADERS
+            });
             if (!response.ok) return null;
             
             const data = await response.json();
@@ -96,7 +112,9 @@ class DiccionarioAPI {
 
     async obtenerPalabraRespaldo(nivel) {
         try {
-            const response = await fetch(`${CONFIG.API.PALABRAS}random?level=${nivel}`);
+            const response = await fetch(`${CONFIG.API.PALABRAS}random?level=${nivel}`, {
+                headers: CONFIG.API.HEADERS
+            });
             if (!response.ok) return null;
             
             const data = await response.json();
@@ -109,6 +127,40 @@ class DiccionarioAPI {
             console.error('Error en obtenerPalabraRespaldo:', error);
             return null;
         }
+    }
+
+    async obtenerPalabraWiktionary(nivel) {
+        try {
+            const response = await fetch(`${CONFIG.API.WIKTIONARY}?action=query&list=random&rnnamespace=0&rnlimit=1&format=json`, {
+                headers: CONFIG.API.HEADERS
+            });
+            if (!response.ok) return null;
+            
+            const data = await response.json();
+            const palabra = data.query.random[0].title;
+            
+            // Obtener definición
+            const definicionResponse = await fetch(`${CONFIG.API.WIKTIONARY}?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(palabra)}&format=json`);
+            if (!definicionResponse.ok) return null;
+            
+            const definicionData = await definicionResponse.json();
+            const page = Object.values(definicionData.query.pages)[0];
+            
+            return {
+                palabra: palabra,
+                definicion: page.extract || 'Definición no disponible',
+                categoria: 'general'
+            };
+        } catch (error) {
+            console.error('Error en obtenerPalabraWiktionary:', error);
+            return null;
+        }
+    }
+
+    obtenerPalabraLocal(nivel) {
+        const palabras = this.palabrasBase[nivel];
+        const indice = Math.floor(Math.random() * palabras.length);
+        return palabras[indice];
     }
 
     async buscarDefinicion(palabra) {
@@ -167,12 +219,6 @@ class DiccionarioAPI {
             console.error('Error en buscarDefinicionRespaldo:', error);
             return null;
         }
-    }
-
-    obtenerPalabraLocal(nivel) {
-        const palabras = this.palabrasBase[nivel];
-        const indice = Math.floor(Math.random() * palabras.length);
-        return palabras[indice];
     }
 
     buscarDefinicionLocal(palabra) {

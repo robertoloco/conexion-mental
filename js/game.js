@@ -37,9 +37,28 @@ class JuegoConexionMental {
             const palabraData = await diccionarioAPI.obtenerPalabra(this.nivelActual);
             console.log("Palabra obtenida:", palabraData);
             
-            // Evitar palabras repetidas
+            // Verificar si la palabra ya fue usada
             if (this.palabrasUsadas.has(palabraData.palabra)) {
-                return this.nuevaPalabra();
+                // Intentar obtener una palabra diferente
+                let intentos = 0;
+                let nuevaPalabra = palabraData;
+                
+                while (intentos < 3) {
+                    nuevaPalabra = await diccionarioAPI.obtenerPalabra(this.nivelActual);
+                    if (!this.palabrasUsadas.has(nuevaPalabra.palabra)) {
+                        break;
+                    }
+                    intentos++;
+                }
+                
+                // Si después de 3 intentos no encontramos una palabra nueva
+                if (intentos >= 3) {
+                    this.mostrarError('¡Se han agotado las palabras disponibles para este nivel!');
+                    this.finalizarRonda();
+                    return;
+                }
+                
+                palabraData = nuevaPalabra;
             }
 
             // Guardar la palabra actual
@@ -223,8 +242,14 @@ class JuegoConexionMental {
     }
 
     mostrarError(mensaje) {
-        console.error(mensaje);
-        alert(mensaje);
+        const palabraElement = document.getElementById('palabra');
+        palabraElement.textContent = mensaje;
+        palabraElement.style.color = STYLES.COLORES.error;
+        
+        // Restaurar el color después de 3 segundos
+        setTimeout(() => {
+            palabraElement.style.color = STYLES.COLORES.texto;
+        }, 3000);
     }
 }
 
