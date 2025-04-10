@@ -57,85 +57,146 @@ const palabrasBase = {
 class DiccionarioAPI {
     constructor() {
         this.palabrasUsadas = new Set();
-        this.palabrasBase = palabrasBase;
-        this.cache = new Map();
+        this.palabrasBase = {};
+        this.palabrasCargadas = false;
+    }
+
+    async inicializarDiccionario() {
+        if (this.palabrasCargadas) return;
+
+        try {
+            // URL de ejemplo - ajustar según el API que uses
+            const response = await fetch('https://api.dictionaryapi.dev/api/v2/entries/es');
+            const data = await response.json();
+            
+            // Procesar y categorizar palabras por nivel
+            this.palabrasBase = {
+                facil: [],
+                medio: [],
+                dificil: []
+            };
+
+            data.forEach(palabra => {
+                const longitud = palabra.word.length;
+                const dificultad = this.determinarDificultad(longitud, palabra.frequency);
+                
+                if (palabra.meanings && palabra.meanings.length > 0) {
+                    this.palabrasBase[dificultad].push({
+                        palabra: palabra.word,
+                        definicion: palabra.meanings[0].definitions[0].definition
+                    });
+                }
+            });
+
+            this.palabrasCargadas = true;
+            this.guardarEnCache();
+        } catch (error) {
+            console.error('Error al cargar el diccionario:', error);
+            // Usar palabras base como respaldo
+            this.palabrasBase = this.obtenerPalabrasRespaldo();
+            this.palabrasCargadas = true;
+        }
+    }
+
+    determinarDificultad(longitud, frecuencia) {
+        if (longitud <= 5 || frecuencia > 0.8) return 'facil';
+        if (longitud <= 8 || frecuencia > 0.4) return 'medio';
+        return 'dificil';
+    }
+
+    guardarEnCache() {
+        try {
+            localStorage.setItem('diccionarioCache', JSON.stringify({
+                palabras: this.palabrasBase,
+                timestamp: Date.now()
+            }));
+        } catch (error) {
+            console.warn('Error al guardar en caché:', error);
+        }
+    }
+
+    cargarDeCache() {
+        try {
+            const cache = localStorage.getItem('diccionarioCache');
+            if (cache) {
+                const data = JSON.parse(cache);
+                const tiempoTranscurrido = Date.now() - data.timestamp;
+                
+                // Caché válido por 24 horas
+                if (tiempoTranscurrido < 24 * 60 * 60 * 1000) {
+                    this.palabrasBase = data.palabras;
+                    this.palabrasCargadas = true;
+                    return true;
+                }
+            }
+        } catch (error) {
+            console.warn('Error al cargar del caché:', error);
+        }
+        return false;
     }
 
     async obtenerPalabra(nivel) {
+        if (!this.palabrasCargadas) {
+            if (!this.cargarDeCache()) {
+                await this.inicializarDiccionario();
+            }
+        }
+
         const palabrasNivel = this.palabrasBase[nivel];
         const palabrasDisponibles = palabrasNivel.filter(p => !this.palabrasUsadas.has(p.palabra));
 
-        // Si no hay palabras disponibles, reiniciar
         if (palabrasDisponibles.length === 0) {
             this.palabrasUsadas.clear();
-            return null; // Indicar que se acabaron las palabras
+            return null;
         }
 
-        // Seleccionar palabra aleatoria
         const indice = Math.floor(Math.random() * palabrasDisponibles.length);
         const palabraSeleccionada = palabrasDisponibles[indice];
         this.palabrasUsadas.add(palabraSeleccionada.palabra);
 
-        // Primero usar la definición local
         return palabraSeleccionada;
     }
 
     async buscarDefinicion(palabra) {
-        // Primero buscar en palabras base
+        if (!this.palabrasCargadas) {
+            if (!this.cargarDeCache()) {
+                await this.inicializarDiccionario();
+            }
+        }
+
         for (const nivel in this.palabrasBase) {
             const encontrada = this.palabrasBase[nivel].find(item => 
                 item.palabra.toLowerCase() === palabra.toLowerCase()
             );
             if (encontrada) return encontrada;
         }
-
-        // Si no se encuentra localmente y está en caché, usar caché
-        if (this.cache.has(palabra)) {
-            const cached = this.cache.get(palabra);
-            if (Date.now() - cached.timestamp < CONFIG.API.CACHE_TIME * 1000) {
-                return {
-                    palabra: palabra,
-                    definicion: cached.data
-                };
-            }
-        }
-
-        // Si no se encuentra en ningún lado, devolver mensaje por defecto
+        
         return {
             palabra: palabra,
             definicion: "No se encontró definición para esta palabra."
         };
     }
 
-    async obtenerDefinicionAPI(palabra) {
-        try {
-            const response = await fetch(`${CONFIG.API.URL}${encodeURIComponent(palabra)}`);
-            if (!response.ok) {
-                throw new Error('No se encontró la palabra en la API');
-            }
-
-            const data = await response.json();
-            if (data && data[0] && data[0].meanings && data[0].meanings[0]) {
-                const definicion = data[0].meanings[0].definitions[0].definition;
-                
-                // Guardar en caché
-                this.cache.set(palabra, {
-                    data: definicion,
-                    timestamp: Date.now()
-                });
-
-                return definicion;
-            }
-            return null;
-        } catch (error) {
-            console.warn('Error al obtener definición:', error);
-            return null;
-        }
-    }
-
     reiniciarPalabras() {
         this.palabrasUsadas.clear();
-        this.cache.clear();
+    }
+
+    obtenerPalabrasRespaldo() {
+        // Mantener las palabras base originales como respaldo
+        return {
+            facil: [
+                { palabra: 'casa', definicion: 'Edificio destinado a vivienda' },
+                // ... resto de palabras fáciles
+            ],
+            medio: [
+                { palabra: 'conexión', definicion: 'Enlace, atadura, trabazón, concatenación de una cosa con otra' },
+                // ... resto de palabras medias
+            ],
+            dificil: [
+                { palabra: 'inefable', definicion: 'Que no se puede explicar con palabras' },
+                // ... resto de palabras difíciles
+            ]
+        };
     }
 }
 

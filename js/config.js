@@ -7,14 +7,15 @@ export const CONFIG = {
         medio: 'Medio',
         dificil: 'Difícil'
     },
-    API: {
-        URL: 'https://api.dictionaryapi.dev/api/v2/entries/es/',
-        CACHE_TIME: 3600 // 1 hora en segundos
-    },
     CATEGORIAS: {
         facil: ['básico', 'simple', 'común'],
         medio: ['intermedio', 'estándar', 'regular'],
         dificil: ['avanzado', 'complejo', 'experto']
+    },
+    API: {
+        URL: 'https://api.dictionaryapi.dev/api/v2/entries/es',
+        CACHE_DURATION: 24 * 60 * 60 * 1000, // 24 horas en milisegundos
+        PALABRAS_POR_NIVEL: 50 // Número de palabras a mantener por nivel
     }
 };
 
